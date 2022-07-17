@@ -1,4 +1,4 @@
-package smtpdwithusertohandler
+package smtpd
 
 
 import (
