@@ -1,4 +1,5 @@
-package smtpd
+package smtpdwithusertohandler
+
 
 import (
 	"bufio"
