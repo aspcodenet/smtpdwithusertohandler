@@ -1,5 +1,6 @@
 // Package smtpd implements a basic SMTP server.
-package smtpd
+package smtpdwithusertohandler
+
 
 import (
 	"bufio"
