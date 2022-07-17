@@ -1,6 +1,5 @@
 // Package smtpd implements a basic SMTP server.
-package smtpdwithusertohandler
-
+package smtpd
 
 import (
 	"bufio"
@@ -33,13 +32,13 @@ var (
 )
 
 // Handler function called upon successful receipt of an email.
-type Handler func(remoteAddr net.Addr, from string, to []string, data []byte) error
+type Handler func(remoteAddr net.Addr, from string, to []string, data []byte, authenticatedUser string) error
 
 // HandlerRcpt function called on RCPT. Return accept status.
 type HandlerRcpt func(remoteAddr net.Addr, from string, to string) bool
 
-// AuthHandler function called when a login attempt is performed. Returns true if credentials are correct.
-type AuthHandler func(remoteAddr net.Addr, mechanism string, username []byte, password []byte, shared []byte) (bool, error)
+// AuthHandler function called when a login attempt is performsed. Returns true if credentials are correct.
+type AuthHandler func(remoteAddr net.Addr, mechanism string, uername []byte, password []byte, shared []byte) (bool, error)
 
 var ErrServerClosed = errors.New("Server has been closed")
 
@@ -213,15 +212,16 @@ func (srv *Server) Serve(ln net.Listener) error {
 }
 
 type session struct {
-	srv           *Server
-	conn          net.Conn
-	br            *bufio.Reader
-	bw            *bufio.Writer
-	remoteIP      string // Remote IP address
-	remoteHost    string // Remote hostname according to reverse DNS lookup
-	remoteName    string // Remote hostname as supplied with EHLO
-	tls           bool
-	authenticated bool
+	srv               *Server
+	conn              net.Conn
+	br                *bufio.Reader
+	bw                *bufio.Writer
+	remoteIP          string // Remote IP address
+	remoteHost        string // Remote hostname according to reverse DNS lookup
+	remoteName        string // Remote hostname as supplied with EHLO
+	tls               bool
+	authenticated     bool
+	authenticatedUser string
 }
 
 // Create new session from connection.
@@ -474,7 +474,7 @@ loop:
 
 			// Pass mail on to handler.
 			if s.srv.Handler != nil {
-				err := s.srv.Handler(s.conn.RemoteAddr(), from, to, buffer.Bytes())
+				err := s.srv.Handler(s.conn.RemoteAddr(), from, to, buffer.Bytes(), s.authenticatedUser)
 				if err != nil {
 					s.writef("451 4.3.5 Unable to process mail")
 					break
@@ -794,7 +794,9 @@ func (s *session) handleAuthLogin(arg string) (bool, error) {
 
 	// Validate credentials.
 	authenticated, err := s.srv.AuthHandler(s.conn.RemoteAddr(), "LOGIN", username, password, nil)
-
+	if authenticated {
+		s.authenticatedUser = string(username)
+	}
 	return authenticated, err
 }
 
@@ -822,6 +824,9 @@ func (s *session) handleAuthPlain(arg string) (bool, error) {
 
 	// Validate credentials.
 	authenticated, err := s.srv.AuthHandler(s.conn.RemoteAddr(), "PLAIN", parts[1], parts[2], nil)
+	if authenticated {
+		s.authenticatedUser = string(parts[1])
+	}
 
 	return authenticated, err
 }
@@ -852,6 +857,9 @@ func (s *session) handleAuthCramMD5() (bool, error) {
 
 	// Validate credentials.
 	authenticated, err := s.srv.AuthHandler(s.conn.RemoteAddr(), "CRAM-MD5", []byte(fields[0]), []byte(fields[1]), []byte(shared))
+	if authenticated {
+		s.authenticatedUser = string([]byte(fields[0]))
+	}
 
 	return authenticated, err
 }
